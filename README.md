@@ -24,3 +24,17 @@ Typical runtime-only resources include:
 - `KNOWLEDGE_BASE_CHROMA_DIR`
 
 Use `backend/.env.example` and `frontend/.env.example` as configuration templates.
+
+## 项目效果
+
+### 首页 / 对话界面
+
+![首页效果](images/chat.png)
+
+### Agent 问答效果
+
+![Agent 问答效果](images/calligraphy.png)
+
+### 媒体检索结果
+
+![媒体检索结果](images/media.png)
