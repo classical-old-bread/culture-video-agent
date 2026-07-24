@@ -1,5 +1,6 @@
 from typing import Literal
 
+# Pydantic 用来声明请求/响应数据结构，并自动做 FastAPI 参数校验。
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +10,7 @@ class ChatRequest(BaseModel):
     calligraphy_source_text: str | None = Field(default=None, max_length=4000, examples=[None])
     calligraphy_style: str | None = Field(default=None, max_length=50, examples=[None])
     calligraphy_author: str | None = Field(default=None, max_length=50, examples=[None])
+    short_video_character_profile: str | None = Field(default=None, max_length=1500, examples=[None])
 
     model_config = {
         "json_schema_extra": {
@@ -38,12 +40,14 @@ class VideoItem(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    type: Literal["text", "text_with_video", "out_of_scope", "calligraphy", "agent"]
+    type: Literal["text", "text_with_video", "out_of_scope", "calligraphy", "agent", "short_video"]
     answer: str
     videos: list[VideoItem] = []
     auto_play: bool = False
     calligraphy_image_url: str | None = None
     calligraphy_missing_chars: list[str] = []
+    calligraphy_selection: dict | None = None
+    short_video_project: dict | None = None
     sources: list[dict] = []
     tool_calls: list[dict] = []
 

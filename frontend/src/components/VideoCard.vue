@@ -2,14 +2,14 @@
   <div class="video-card">
     <div class="video-meta">
       <div>
-        <div class="video-kicker">{{ isAudio ? '本地民歌' : '本地视频' }}</div>
+        <div class="video-kicker">{{ isAudio ? '本地音频' : '本地视频' }}</div>
         <div class="video-name">{{ video.video_name }}</div>
         <div v-if="video.category" class="video-id">{{ video.category }}</div>
       </div>
       <div class="video-id">ID {{ video.id }}</div>
     </div>
 
-    <div class="video-frame">
+    <div class="video-frame" :class="{ 'audio-frame': isAudio }">
       <audio
         v-if="isAudio"
         ref="mediaRef"
@@ -39,7 +39,9 @@
       />
     </div>
 
-    <p v-if="loadError" class="video-error">音乐文件不存在或路径未配置，请检查 MUSIC_ROOT 和文件位置。</p>
+    <p v-if="loadError" class="video-error">
+      媒体文件不存在或数据库中的文件路径不可用，请检查 media_resources.file_path。
+    </p>
   </div>
 </template>
 

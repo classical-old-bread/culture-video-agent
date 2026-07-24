@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.*
+frontend-dev.log
+frontend-dev.err.log
+dist.rar

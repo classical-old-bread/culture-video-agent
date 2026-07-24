@@ -36,6 +36,9 @@ pnpm-debug.log*
 backend/generated/
 backend/knowledge_base/chroma/
 frontend/dist.rar
+runtime/
+deploy/mysql/*.sql
+!deploy/mysql/.gitkeep
 
 # Local/editor files
 .DS_Store

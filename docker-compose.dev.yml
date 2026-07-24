@@ -1,0 +1,60 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: culture-mysql-dev
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: dev_root_password
+      MYSQL_DATABASE: culture_video_agent
+      MYSQL_USER: culture_app
+      MYSQL_PASSWORD: dev_app_password
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - culture_mysql_dev_data:/var/lib/mysql
+    networks:
+      - backend_net
+
+  backend:
+    build:
+      context: ./backend
+    container_name: culture_backend_dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env.docker
+    volumes:
+      - ./runtime:/data/culture-agent
+    depends_on:
+      - mysql
+    networks:
+      - backend_net
+      - frontend_net
+
+  frontend:
+    build: 
+     context: ./frontend
+     args:
+       VITE_API_BASE_URL: ""
+    container_name: culture_frontend_dev
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - frontend_net
+
+
+volumes:
+  culture_mysql_dev_data:
+    external: true
+
+networks:
+  frontend_net:
+  backend_net:

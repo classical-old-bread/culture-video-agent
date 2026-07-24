@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import mimetypes
 import re
 from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 
-from app.config import get_settings
+from sqlalchemy.orm import Session
+
+from app.models import MediaResource
 
 
-SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
-SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm"}
 DEFAULT_MEDIA_SEARCH_LIMIT = 3
 QUERY_FILLER_WORDS = [
     "播放",
@@ -40,6 +37,7 @@ QUERY_FILLER_WORDS = [
     "mp4",
     "play",
 ]
+TOKEN_SPLIT_PATTERN = r"[\s,，。.!！?？、:：;；《》“”\"'（）()\[\]【】_-]+"
 
 
 @dataclass(frozen=True)
@@ -62,10 +60,71 @@ class MusicTrack:
         }
 
 
+def search_videos_by_keywords(
+    keywords: list[str],
+    limit: int = DEFAULT_MEDIA_SEARCH_LIMIT,
+    *,
+    prefer_video: bool = True,
+    db: Session,
+) -> list[dict]:
+    if db is None:
+        raise RuntimeError("Media search requires a database session.")
+
+    queries = [keyword.strip() for keyword in keywords if keyword and keyword.strip()]
+    if not queries:
+        return []
+
+    query = " ".join(queries)
+    terms = re.split(TOKEN_SPLIT_PATTERN, query)
+    library = _load_media_library_from_db(db)
+    scored = [
+        (score, track)
+        for track in library
+        if (score := _score_track(track, query, terms)) > 0
+    ]
+
+    scored.sort(
+        key=lambda item: (
+            *(_media_sort_priority(item[1]) if prefer_video else (0, 0)),
+            -item[0],
+            item[1].category,
+            item[1].video_name,
+        )
+    )
+    tracks = [track for _, track in scored] if scored else _fallback_ranked_tracks(library)
+    return [track.to_dict() for track in tracks[: max(1, limit)]]
+
+
+def get_video_by_id(video_id: int, db: Session) -> dict | None:
+    if db is None:
+        raise RuntimeError("Media playback requires a database session.")
+
+    row = db.query(MediaResource).filter(MediaResource.id == video_id).first()
+    if not row:
+        return None
+    return _track_from_media_resource(row).to_dict()
+
+
+def _load_media_library_from_db(db: Session) -> tuple[MusicTrack, ...]:
+    rows = db.query(MediaResource).order_by(MediaResource.id.asc()).all()
+    return tuple(_track_from_media_resource(row) for row in rows)
+
+
+def _track_from_media_resource(row: MediaResource) -> MusicTrack:
+    return MusicTrack(
+        id=row.id,
+        video_name=row.title,
+        file_path=row.file_path,
+        category=row.category or "",
+        media_type=row.media_type or ("video/mp4" if row.media_kind == "video" else "audio/mpeg"),
+        media_kind=row.media_kind or "audio",
+    )
+
+
 def _normalize_text(value: str) -> str:
     value = value.lower().strip()
     value = re.sub(r"\.(mp3|wav|m4a|aac|ogg|flac|mp4|m4v|mov|webm)$", "", value)
-    return re.sub(r"[\s,，。.!！?？、:：;；《》“”\"'（）()\[\]【】_-]+", "", value)
+    return re.sub(TOKEN_SPLIT_PATTERN, "", value)
 
 
 def _clean_query(query: str) -> str:
@@ -84,55 +143,6 @@ def _longest_common_substring_length(left: str, right: str) -> int:
             if left[start : start + size] in right:
                 return size
     return 0
-
-
-@lru_cache(maxsize=1)
-def _load_music_library() -> tuple[MusicTrack, ...]:
-    settings = get_settings()
-    roots = [
-        (Path(settings.video_root).expanduser().resolve(), "video"),
-        (Path(settings.music_root).expanduser().resolve(), "audio"),
-    ]
-    tracks: list[MusicTrack] = []
-
-    for root, media_kind in roots:
-        tracks.extend(_scan_media_root(root, media_kind, start_index=len(tracks) + 1))
-
-    return tuple(tracks)
-
-
-def _scan_media_root(root: Path, media_kind: str, start_index: int) -> list[MusicTrack]:
-    if not root.exists():
-        return []
-
-    supported_extensions = SUPPORTED_VIDEO_EXTENSIONS if media_kind == "video" else SUPPORTED_AUDIO_EXTENSIONS
-    files = sorted(
-        (
-            path
-            for path in root.rglob("*")
-            if path.is_file() and path.suffix.lower() in supported_extensions
-        ),
-        key=lambda path: str(path.relative_to(root)).lower(),
-    )
-
-    tracks: list[MusicTrack] = []
-    for index, path in enumerate(files, start=start_index):
-        relative = path.relative_to(root)
-        category = relative.parts[0] if len(relative.parts) > 1 else ""
-        media_type = mimetypes.guess_type(path.name)[0]
-        if not media_type:
-            media_type = "video/mp4" if media_kind == "video" else "audio/mpeg"
-        tracks.append(
-            MusicTrack(
-                id=index,
-                video_name=path.stem,
-                file_path=str(path),
-                category=category,
-                media_type=media_type,
-                media_kind=media_kind,
-            )
-        )
-    return tracks
 
 
 def _score_track(track: MusicTrack, query: str, terms: list[str]) -> int:
@@ -178,56 +188,19 @@ def _score_track(track: MusicTrack, query: str, terms: list[str]) -> int:
 
 
 def _media_sort_priority(track: MusicTrack) -> tuple[int, int]:
-    suffix = Path(track.file_path).suffix.lower()
+    file_path = track.file_path.lower()
     return (
         0 if track.media_kind == "video" else 1,
-        0 if suffix == ".mp4" else 1,
+        0 if file_path.endswith(".mp4") else 1,
     )
 
 
-def _fallback_ranked_tracks() -> list[MusicTrack]:
+def _fallback_ranked_tracks(library: tuple[MusicTrack, ...]) -> list[MusicTrack]:
     return sorted(
-        _load_music_library(),
+        library,
         key=lambda track: (
             *_media_sort_priority(track),
             track.category,
             track.video_name,
         ),
     )
-
-
-def search_videos_by_keywords(
-    keywords: list[str],
-    limit: int = DEFAULT_MEDIA_SEARCH_LIMIT,
-    *,
-    prefer_video: bool = True,
-) -> list[dict]:
-    queries = [keyword.strip() for keyword in keywords if keyword and keyword.strip()]
-    if not queries:
-        return []
-
-    query = " ".join(queries)
-    terms = re.split(r"[\s,，。.!！?？、:：;；《》“”\"'（）()\[\]【】_-]+", query)
-    scored = [
-        (score, track)
-        for track in _load_music_library()
-        if (score := _score_track(track, query, terms)) > 0
-    ]
-
-    scored.sort(
-        key=lambda item: (
-            *(_media_sort_priority(item[1]) if prefer_video else (0, 0)),
-            -item[0],
-            item[1].category,
-            item[1].video_name,
-        )
-    )
-    tracks = [track for _, track in scored] if scored else _fallback_ranked_tracks()
-    return [track.to_dict() for track in tracks[: max(1, limit)]]
-
-
-def get_video_by_id(video_id: int) -> dict | None:
-    for track in _load_music_library():
-        if track.id == video_id:
-            return track.to_dict()
-    return None

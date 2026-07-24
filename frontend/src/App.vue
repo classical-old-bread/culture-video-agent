@@ -8,7 +8,7 @@
           </svg>
         </div>
         <div>
-          <div class="brand-title">秦风民歌大模型</div>
+          <div class="brand-title">文化 Agent 工作台</div>
           <div class="brand-subtitle">Culture Agent</div>
         </div>
       </div>
@@ -19,20 +19,19 @@
           :key="item.label"
           type="button"
           class="nav-item"
-          :class="{ active: activeView === item.view, muted: item.muted }"
+          :class="{ active: activeView === item.view }"
           @click="selectNavItem(item)"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path :d="item.icon" />
           </svg>
           <span>{{ item.label }}</span>
-          <small v-if="item.badge">{{ item.badge }}</small>
         </button>
       </nav>
 
       <section class="session-panel" aria-label="会话列表">
         <div class="session-panel-header">
-          <span>对话</span>
+          <span>会话</span>
           <button type="button" :disabled="loading" @click="createNewSession">新建</button>
         </div>
 
@@ -56,7 +55,7 @@
               type="button"
               class="session-delete"
               :disabled="loading"
-              :aria-label="`删除对话：${session.title}`"
+              :aria-label="`删除会话：${session.title}`"
               @click.stop="deleteSession(session.id)"
             >
               ×
@@ -67,62 +66,89 @@
 
       <div class="sidebar-card">
         <span>当前能力</span>
-        <strong>文化问答 · 视频检索</strong>
-        <p>输入问题后自动识别文化主题与陕北民歌视频需求。</p>
+        <strong>问答 · 书法 · 短剧 · 媒体</strong>
+        <p>对话框负责理解需求和媒体播放，工作区负责展示书法、短剧、来源和工具轨迹。</p>
       </div>
     </aside>
 
     <main v-if="activeView === 'chat'" class="chat-page">
       <header class="topbar">
         <div>
-          <div class="product-name">文化问答</div>
-          <p>传统文化知识解答与陕北民歌视频</p>
+          <div class="product-name">传统文化多工具 Agent</div>
+          <p>一个入口处理文化知识、书法生成、短剧脚本和本地媒体检索。</p>
         </div>
         <div class="status-pill" :class="{ active: loading || isListening || isSpeaking || radioModeActive }">
           <span class="status-dot" aria-hidden="true"></span>
-          {{ radioModeActive ? '麦克风监听' : isListening ? '正在聆听' : isSpeaking ? '朗读中' : loading ? '生成中' : '服务就绪' }}
+          {{ statusText }}
         </div>
       </header>
 
-      <section class="output-zone">
-        <div class="output-header">
-          <div>
-            <strong>对话记录</strong>
-            <span>{{ activeSessionTitle }}</span>
-          </div>
-          <button type="button" class="clear-button" :disabled="loading" @click="clearCurrentSession">清空当前对话</button>
-        </div>
-
-        <div ref="messageListRef" class="message-list" aria-live="polite">
-          <ChatMessage
-            v-for="message in messages"
-            :key="message.id"
-            :role="message.role"
-            :content="message.content"
-            :videos="message.videos"
-            :auto-play="message.autoPlay"
-            :calligraphy-image-url="message.calligraphyImageUrl"
-            :tool-calls="message.toolCalls"
-            @video-play="handleLocalMediaPlay"
-            @video-pause="handleLocalMediaStop"
-            @video-ended="handleLocalMediaStop"
-          />
-
-          <div v-if="loading" class="message-row assistant">
-            <div class="message-bubble loading-bubble">
-              <span class="loader" aria-hidden="true"></span>
-              正在生成回答...
+      <div class="workspace-grid" :class="{ 'panel-open': workspacePanelOpen }">
+        <section class="output-zone">
+          <div class="output-header">
+            <div>
+              <strong>对话记录</strong>
+              <span>{{ activeSessionTitle }}</span>
+            </div>
+            <div class="output-actions">
+              <button type="button" class="clear-button" :disabled="loading" @click="clearCurrentSession">
+                清空
+              </button>
+              <button
+                type="button"
+                class="workspace-toggle"
+                :class="{ active: workspacePanelOpen || hasWorkspaceContent }"
+                @click="workspacePanelOpen = !workspacePanelOpen"
+              >
+                工作区
+                <span v-if="workspaceBadge">{{ workspaceBadge }}</span>
+              </button>
             </div>
           </div>
-        </div>
-      </section>
+
+          <div ref="messageListRef" class="message-list" aria-live="polite">
+            <ChatMessage
+              v-for="message in messages"
+              :key="message.id"
+              :role="message.role"
+              :content="message.content"
+              :videos="message.videos"
+              :auto-play="message.autoPlay"
+              :calligraphy-image-url="message.calligraphyImageUrl"
+              :calligraphy-selection="message.calligraphySelection"
+              :tool-calls="message.toolCalls"
+              @video-play="handleLocalMediaPlay"
+              @video-pause="handleLocalMediaStop"
+              @video-ended="handleLocalMediaStop"
+              @calligraphy-option="handleCalligraphyOption"
+            />
+
+            <div v-if="loading" class="message-row assistant">
+              <div class="message-bubble loading-bubble">
+                <span class="loader" aria-hidden="true"></span>
+                正在生成回答...
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <TaskPanel
+          v-if="workspacePanelOpen"
+          :message="latestAssistantMessage"
+          :loading="loading"
+          @video-play="handleLocalMediaPlay"
+          @video-pause="handleLocalMediaStop"
+          @video-ended="handleLocalMediaStop"
+          @calligraphy-option="handleCalligraphyOption"
+        />
+      </div>
 
       <form class="composer" @submit.prevent="handleSend">
         <label class="sr-only" for="chat-input">输入问题</label>
         <textarea
           id="chat-input"
           v-model="input"
-          placeholder="询问传统文化、诗词民俗，或输入具体民歌、地方曲艺等相关问题"
+          placeholder="可以问传统文化、生成书法、创作成语短剧，或查找本地民歌视频"
           rows="2"
           maxlength="1000"
           :disabled="loading"
@@ -171,11 +197,266 @@
       </form>
     </main>
 
-    <main v-else class="knowledge-page">
+    <main v-else-if="activeView === 'short_video'" class="short-video-page">
+      <header class="topbar">
+        <div>
+          <div class="product-name">短剧创作工作台</div>
+          <p>独立生成五镜头分镜、对白和 AI 视频提示词。</p>
+        </div>
+        <div class="status-pill" :class="{ active: shortVideoLoading }">
+          <span class="status-dot" aria-hidden="true"></span>
+          {{ shortVideoLoading ? '短剧生成中' : shortVideoProject ? '脚本就绪' : '等待创作' }}
+        </div>
+      </header>
+
+      <div class="short-video-workspace">
+        <section class="short-video-control" aria-label="短剧创作控制台">
+          <div class="short-video-section-heading">
+            <div>
+              <span>Creative Console</span>
+              <strong>创作控制台</strong>
+            </div>
+          </div>
+
+          <label class="field-block">
+            <span>短剧主题</span>
+            <textarea
+              v-model="shortVideoTopic"
+              rows="5"
+              maxlength="300"
+              placeholder="输入任意短剧主题，例如：雨天回家、校园小误会、企鹅女孩买早餐、魔法便利店、端午节传说"
+            />
+          </label>
+
+          <section class="character-config standalone">
+            <div class="character-config-header">
+              <div>
+                <strong>主角一致性设定</strong>
+                <span>参考图只用于你记录角色方向，当前生成主要依赖下方文字设定。</span>
+              </div>
+              <label class="character-upload">
+                上传图
+                <input type="file" accept="image/*" @change="handleCharacterImageUpload" />
+              </label>
+            </div>
+            <div class="character-config-body">
+              <div v-if="shortVideoCharacterImage" class="character-preview">
+                <img :src="shortVideoCharacterImage" alt="短剧主角参考图" />
+                <button type="button" @click="clearCharacterImage">移除</button>
+              </div>
+              <div v-else class="character-drop-placeholder">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 17 9 12l4 4 2-2 5 5M6 5h12v14H6V5Zm3 4h.01" />
+                </svg>
+                <span>可上传参考图</span>
+              </div>
+              <textarea
+                v-model="shortVideoCharacterProfile"
+                rows="6"
+                maxlength="1500"
+                placeholder="例如：穿企鹅连体服的小女孩，黑色齐刘海短发，浅蓝色十字发夹。所有镜头保持同一脸型、发型、服装和配饰。"
+                @blur="saveCharacterProfile"
+              />
+            </div>
+          </section>
+
+          <section v-if="shortVideoPrototypeFrames.length" class="prototype-frame-panel">
+            <div class="prototype-frame-header">
+              <div>
+                <strong>原型画面</strong>
+                <span>从原型帧库中选择一帧作为本次渲染的构图和画风参考。</span>
+              </div>
+              <button
+                type="button"
+                :disabled="!selectedPrototypeFrameUrl"
+                @click="selectedPrototypeFrameUrl = ''"
+              >
+                清除
+              </button>
+            </div>
+            <div class="prototype-frame-list">
+              <button
+                v-for="frame in shortVideoPrototypeFrames"
+                :key="frame.url"
+                type="button"
+                class="prototype-frame-option"
+                :class="{ active: selectedPrototypeFrameUrl === frame.url }"
+                @click="selectedPrototypeFrameUrl = frame.url"
+              >
+                <img :src="frame.url" :alt="`原型帧 ${frame.name}`" />
+                <span>{{ frame.name.replace(/\.[^.]+$/, '') }}</span>
+              </button>
+            </div>
+          </section>
+
+          <div class="short-video-actions">
+            <button
+              type="button"
+              class="short-video-generate"
+              :disabled="shortVideoLoading || !shortVideoTopic.trim()"
+              @click="generateShortVideo"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 5h14v10H5V5Zm3 14h8M12 15v4M9 9l5 3-5 3V9Z" />
+              </svg>
+              {{ shortVideoLoading ? 'Agent 创作中' : '生成短剧方案' }}
+            </button>
+            <button type="button" class="short-video-secondary" :disabled="shortVideoLoading" @click="resetShortVideo">
+              清空
+            </button>
+          </div>
+
+          <p v-if="shortVideoError" class="short-video-error">{{ shortVideoError }}</p>
+        </section>
+
+        <section class="short-video-result" aria-label="短剧生成结果">
+          <nav class="short-video-tabs" aria-label="短剧结果视图">
+            <button
+              v-for="tab in shortVideoTabs"
+              :key="tab.id"
+              type="button"
+              :class="{ active: shortVideoActiveTab === tab.id }"
+              @click="shortVideoActiveTab = tab.id"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path :d="tab.icon" />
+              </svg>
+              {{ tab.label }}
+            </button>
+          </nav>
+
+          <div class="short-video-result-body">
+            <div v-if="!shortVideoProject && !shortVideoLoading" class="short-video-empty">
+              <strong>等待短剧方案</strong>
+              <p>输入主题后会生成主题表达、主角设定、五镜头分镜和可复制的视频提示词。</p>
+            </div>
+
+            <div v-else-if="shortVideoLoading" class="short-video-empty">
+              <span class="loader" aria-hidden="true"></span>
+              <strong>正在生成短剧方案</strong>
+              <p>{{ shortVideoDraftContent || '短视频创作 Agent 正在组织分镜、对白和提示词。' }}</p>
+            </div>
+
+            <div v-else-if="shortVideoActiveTab === 'overview'" class="short-video-overview">
+              <section class="short-video-summary-card">
+                <span>标题</span>
+                <strong>{{ shortVideoProject.title }}</strong>
+              </section>
+              <div class="short-video-meta-grid">
+                <section>
+                  <span>主题</span>
+                  <strong>{{ shortVideoProject.topic }}</strong>
+                </section>
+                <section>
+                  <span>受众</span>
+                  <strong>{{ shortVideoProject.audience }}</strong>
+                </section>
+              </div>
+              <section class="short-video-note">
+                <span>主题表达</span>
+                <p>{{ shortVideoProject.moral }}</p>
+              </section>
+              <section class="short-video-note">
+                <span>统一画风</span>
+                <p>{{ shortVideoProject.visual_style }}</p>
+              </section>
+              <section class="short-video-note">
+                <span>主角</span>
+                <p>{{ shortVideoProject.main_character }}</p>
+              </section>
+            </div>
+
+            <div v-else-if="shortVideoActiveTab === 'shots'" class="short-video-shot-grid">
+              <article
+                v-for="shot in shortVideoProject.shots"
+                :key="shot.shot"
+                class="short-video-shot-card"
+              >
+                <div class="shot-card-header">
+                  <strong>镜头 {{ shot.shot }}</strong>
+                  <span>{{ shot.duration }}</span>
+                </div>
+                <dl class="shot-detail">
+                  <div>
+                    <dt>场景</dt>
+                    <dd>{{ shot.scene }}</dd>
+                  </div>
+                  <div>
+                    <dt>镜头</dt>
+                    <dd>{{ shot.camera }}</dd>
+                  </div>
+                  <div>
+                    <dt>画面</dt>
+                    <dd>{{ shot.action }}</dd>
+                  </div>
+                  <div>
+                    <dt>台词</dt>
+                    <dd>{{ shot.dialogue }}</dd>
+                  </div>
+                  <div>
+                    <dt>衔接</dt>
+                    <dd>{{ shot.continuity }}</dd>
+                  </div>
+                </dl>
+              </article>
+            </div>
+
+            <div v-else class="short-video-prompts">
+              <div class="section-heading">
+                <span>AI 视频提示词</span>
+                <button type="button" class="panel-copy-button" @click="copyShortVideoPrompts">复制全部</button>
+              </div>
+              <article
+                v-for="shot in shortVideoProject.shots"
+                :key="`prompt-${shot.shot}`"
+                class="prompt-box"
+              >
+                <div>
+                  <span>镜头 {{ shot.shot }}</span>
+                  <div class="prompt-actions">
+                    <button type="button" @click="copyText(shot.video_prompt)">复制</button>
+                    <button
+                      type="button"
+                      :disabled="isShotRendering(shot.shot)"
+                      @click="confirmRenderShot(shot)"
+                    >
+                      {{ renderButtonLabel(shot.shot) }}
+                    </button>
+                  </div>
+                </div>
+                <p>{{ shot.video_prompt }}</p>
+                <div v-if="shortVideoRenderTasks[shot.shot]" class="render-status-card">
+                  <div>
+                    <strong>{{ renderStatusLabel(shortVideoRenderTasks[shot.shot]) }}</strong>
+                    <span v-if="shortVideoRenderTasks[shot.shot].progress">
+                      {{ shortVideoRenderTasks[shot.shot].progress }}%
+                    </span>
+                  </div>
+                  <video
+                    v-if="shortVideoRenderTasks[shot.shot].video_url"
+                    :src="shortVideoRenderTasks[shot.shot].video_url"
+                    controls
+                  ></video>
+                  <p v-if="shortVideoRenderTasks[shot.shot].error">
+                    {{ shortVideoRenderTasks[shot.shot].error }}
+                  </p>
+                </div>
+              </article>
+              <section v-if="shortVideoProject.negative_prompt" class="short-video-note negative">
+                <span>负面提示词</span>
+                <p>{{ shortVideoProject.negative_prompt }}</p>
+              </section>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <main v-else-if="activeView === 'knowledge'" class="knowledge-page">
       <header class="topbar">
         <div>
           <div class="product-name">书法字库</div>
-          <p>书法字库字形展示</p>
+          <p>浏览当前可用的书法字形资源。</p>
         </div>
         <div class="status-pill" :class="{ active: galleryLoading }">
           <span class="status-dot" aria-hidden="true"></span>
@@ -187,7 +468,7 @@
         <div class="glyph-showcase-header">
           <div>
             <strong>字库长卷</strong>
-            <span>精选书法字形，铺展传统笔墨之美</span>
+            <span>精选书法字形，用于生成书法作品。</span>
           </div>
         </div>
 
@@ -221,72 +502,55 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import { streamChatMessage } from './api/chat'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import ChatMessage from './components/ChatMessage.vue'
+import TaskPanel from './components/TaskPanel.vue'
+import {
+  fetchShortVideoPrototypeFrames,
+  fetchShortVideoRenderStatus,
+  streamChatMessage,
+  submitShortVideoRender,
+} from './api/chat'
+import { useAssistantCommands } from './composables/useAssistantCommands'
 import { useCalligraphyGallery } from './composables/useCalligraphyGallery'
 import { useChatSessions } from './composables/useChatSessions'
-import { compactRepeatedVoiceText, createCloudRecognition } from './composables/useCloudRecognition'
+import { useChatStreaming } from './composables/useChatStreaming'
+import { useRadioMode } from './composables/useRadioMode'
 import { useSpeechPlayback } from './composables/useSpeechPlayback'
+import { useVoiceInput } from './composables/useVoiceInput'
 
 const input = ref('')
 const loading = ref(false)
-const currentStreamController = ref(null)
-const currentResponseShouldSpeak = ref(true)
 const messageListRef = ref(null)
 const recognitionRef = ref(null)
+const isListening = ref(false)
 const pendingVoiceText = ref('')
-const voiceIsPressed = ref(false)
-const voiceStopRequested = ref(false)
 const radioModeActive = ref(false)
-const radioHasVoice = ref(false)
-const radioSubmitting = ref(false)
-const radioRecognitionStarting = ref(false)
-const radioAsrRestartDelay = ref(500)
-const lastRadioAsrErrorAt = ref(0)
-const radioLastVoiceAt = ref(0)
-const lastSubmittedVoiceText = ref('')
-const lastSubmittedVoiceAt = ref(0)
-const audioStreamRef = ref(null)
-const audioContextRef = ref(null)
-const analyserRef = ref(null)
-const radioFrameRef = ref(0)
-const radioRestartTimerRef = ref(0)
-const radioSubmitTimerRef = ref(0)
-
-const VOICE_HOTKEY_CODES = new Set(['F8', 'F9', 'MediaRecord'])
-const RADIO_VOLUME_THRESHOLD = 0.004
-const RADIO_SILENCE_MS = 3000
-const RADIO_TEXT_IDLE_MS = 1600
-const RADIO_DUPLICATE_IGNORE_MS = 9000
-const RADIO_ASR_RESTART_MIN_MS = 500
-const RADIO_ASR_RESTART_MAX_MS = 15000
-const RADIO_ASR_ERROR_MESSAGE_INTERVAL_MS = 12000
-const INTERRUPT_COMMAND_PATTERNS = [
-  /^停止(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^停(止|下|掉|住)?(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^暂停(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^取消(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^中断(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^打断(播放|回答|回复|朗读|播报|生成|输出)?$/,
-  /^别(播放|回答|回复|朗读|播报|输出|说|讲)了?$/,
-  /^不要(播放|回答|回复|朗读|播报|输出|说|讲)了?$/,
-]
-const INTERRUPT_COMMAND_CONTAINS_PATTERNS = [
-  /停止(播放|回答|回复|朗读|播报|生成|输出)/,
-  /停住(播放|回答|回复|朗读|播报|生成|输出)/,
-  /暂停(播放|回答|回复|朗读|播报|生成|输出)/,
-  /中断(播放|回答|回复|朗读|播报|生成|输出)/,
-  /打断(播放|回答|回复|朗读|播报|生成|输出)/,
-  /别(播放|回答|回复|朗读|播报|输出|说|讲)了?/,
-  /不要(播放|回答|回复|朗读|播报|输出|说|讲)了?/,
-]
+const workspacePanelOpen = ref(false)
+const DEFAULT_CHARACTER_PROFILE = '穿企鹅连体服的小女孩，黑色齐刘海短发，浅蓝色十字发夹，黑灰企鹅帽，黄色企鹅嘴帽檐，白色圆肚皮，黄色脚蹼，银色拉链扣。所有镜头保持同一脸型、发型、服装、配饰和颜色。'
+const shortVideoCharacterProfile = ref(window.localStorage.getItem('culture-agent-character-profile') || '')
+const shortVideoCharacterImage = ref('')
+const shortVideoTopic = ref('')
+const shortVideoLoading = ref(false)
+const shortVideoError = ref('')
+const shortVideoProject = ref(null)
+const shortVideoDraftContent = ref('')
+const shortVideoToolCalls = ref([])
+const shortVideoActiveTab = ref('overview')
+const shortVideoRenderTasks = ref({})
+const shortVideoPrototypeFrames = ref([])
+const selectedPrototypeFrameUrl = ref('')
 
 const navItems = [
   {
-    label: '文化问答',
+    label: 'Agent 对话',
     view: 'chat',
     icon: 'M5 6h14v9H8l-3 3V6Z',
+  },
+  {
+    label: '短剧创作',
+    view: 'short_video',
+    icon: 'M5 5h14v14H5V5Zm4 4h2m2 0h2M9 13h6M9 16h4',
   },
   {
     label: '书法字库',
@@ -294,6 +558,31 @@ const navItems = [
     icon: 'M6 4h12v16H6V4Zm3 4h6M9 12h6M9 16h4',
   },
 ]
+
+const shortVideoTabs = [
+  {
+    id: 'overview',
+    label: '方案概览',
+    icon: 'M5 5h14v14H5V5Zm4 4h6M9 12h6M9 15h4',
+  },
+  {
+    id: 'shots',
+    label: '五镜头分镜',
+    icon: 'M4 6h16M4 12h16M4 18h16M8 4v16M16 4v16',
+  },
+  {
+    id: 'prompts',
+    label: '视频提示词',
+    icon: 'M6 5h12v14H6V5Zm3 4h6M9 12h6M9 15h3',
+  },
+]
+
+let scheduleRadioRecognitionRestart = () => {}
+let beforeRadioChatSend = () => {}
+let afterRadioChatSend = () => {}
+let resetRadioPendingState = () => {}
+let stopCurrentRecognition = () => {}
+let isAssistantOutputActive = () => false
 
 const {
   activeView,
@@ -303,6 +592,13 @@ const {
   absoluteGalleryImageUrl,
   selectNavItem,
 } = useCalligraphyGallery()
+
+async function scrollToBottom() {
+  await nextTick()
+  if (messageListRef.value) {
+    messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+  }
+}
 
 const {
   isSpeaking,
@@ -319,7 +615,6 @@ const {
 })
 
 const {
-  welcomeMessage,
   sessions,
   activeSessionId,
   activeSessionTitle,
@@ -335,136 +630,81 @@ const {
   getLatestAssistantCalligraphyText,
 } = useChatSessions({ input, loading, scrollToBottom })
 
-async function scrollToBottom() {
-  await nextTick()
-  if (messageListRef.value) {
-    messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-  }
-}
-
-function wait(ms) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
-}
-
-async function appendStreamingText(index, text) {
-  if (!text) return
-
-  for (let position = 0; position < text.length; position += 3) {
-    messages.value[index].content += text.slice(position, position + 3)
-    await scrollToBottom()
-    await wait(12)
-  }
-}
-
-function stopCurrentRecognition({ abort = false } = {}) {
-  if (!recognitionRef.value) return
-
-  try {
-    if (abort) {
-      recognitionRef.value.abort()
-    } else {
-      recognitionRef.value.stop()
+const latestAssistantMessage = computed(() => {
+  for (let index = messages.value.length - 1; index >= 0; index -= 1) {
+    const message = messages.value[index]
+    if (message.role === 'assistant') {
+      return message
     }
-  } catch {
-    recognitionRef.value = null
-    isListening.value = false
   }
-}
+  return null
+})
 
-const isListening = ref(false)
-
-function isFatalAsrError(detail = '') {
-  return /未配置|未开通|没有流式 ASR 权限|没有流式ASR权限|resource not granted|requested resource not granted|code['":=\s]+403|连接被拒绝|HTTP 400|麦克风权限|NotAllowed/i.test(detail)
-}
-
-function normalizeVoiceText(text) {
-  return text.replace(/\s+/g, '').trim()
-}
-
-function normalizeCommandText(text) {
-  return normalizeVoiceText(text).replace(/[，。！？!?,.；;：:、]/g, '')
-}
-
-function normalizeInterruptCommandText(text) {
-  return normalizeCommandText(text)
-    .replace(/^(请帮我|请给我|麻烦你|请你|能不能|能否|帮我|给我|麻烦|可以|请)+/, '')
-    .replace(/(一下|一下吧|吧|呢|可以吗|好不好|行不行|好吗|谢谢)$/g, '')
-}
-
-function isInterruptCommand(text) {
-  const normalized = normalizeInterruptCommandText(text)
-  return Boolean(normalized) && INTERRUPT_COMMAND_PATTERNS.some((pattern) => pattern.test(normalized))
-}
-
-function containsInterruptCommand(text) {
-  const normalized = normalizeInterruptCommandText(text)
-  return Boolean(normalized) && INTERRUPT_COMMAND_CONTAINS_PATTERNS.some((pattern) => pattern.test(normalized))
-}
-
-function shouldInterruptFromTranscript(text) {
-  return isInterruptCommand(text) || (isAssistantOutputActive() && containsInterruptCommand(text))
-}
-
-function isAssistantOutputActive() {
-  return (
+const hasWorkspaceContent = computed(() => {
+  const message = latestAssistantMessage.value
+  return Boolean(
     loading.value ||
-    isSpeaking.value ||
-    speechQueuePlaying.value ||
-    localMediaPlaying.value ||
-    Boolean(currentStreamController.value)
+    message?.shortVideoProject ||
+    message?.calligraphySelection ||
+    message?.calligraphyImageUrl ||
+    message?.sources?.length
   )
-}
+})
 
-function isRecentlySubmittedVoice(text) {
-  const normalized = normalizeVoiceText(text)
-  if (!normalized) return false
+const workspaceBadge = computed(() => {
+  const message = latestAssistantMessage.value
+  if (loading.value) return '处理中'
+  if (message?.shortVideoProject) return '短剧'
+  if (message?.calligraphyImageUrl || message?.calligraphySelection) return '书法'
+  return ''
+})
 
-  return (
-    normalized === lastSubmittedVoiceText.value &&
-    Date.now() - lastSubmittedVoiceAt.value < RADIO_DUPLICATE_IGNORE_MS
-  )
-}
+const statusText = computed(() => {
+  if (radioModeActive.value) return '麦克风监听'
+  if (isListening.value) return '正在聆听'
+  if (isSpeaking.value) return '朗读中'
+  if (loading.value) return '生成中'
+  return '服务就绪'
+})
 
-function markVoiceSubmitted(text) {
-  lastSubmittedVoiceText.value = normalizeVoiceText(text)
-  lastSubmittedVoiceAt.value = Date.now()
-}
+const {
+  isInterruptCommand,
+  shouldInterruptFromTranscript,
+  normalizeVoiceText,
+} = useAssistantCommands({
+  isAssistantOutputActive: () => isAssistantOutputActive(),
+})
 
-function interruptAssistant({ force = false } = {}) {
-  if (
-    !force &&
-    !loading.value &&
-    !isSpeaking.value &&
-    !speechQueuePlaying.value &&
-    !currentStreamController.value
-  ) {
-    return
-  }
+const {
+  sendMessage,
+  interruptAssistant,
+  isAssistantOutputActive: chatOutputActive,
+} = useChatStreaming({
+  input,
+  loading,
+  messages,
+  syncActiveSession,
+  buildConversationContext,
+  getLatestAssistantCalligraphyText,
+  scrollToBottom,
+  stopLocalMedia,
+  stopCurrentAudio,
+  speakText,
+  queueStreamingSpeech,
+  isSpeaking,
+  speechQueuePlaying,
+  localMediaPlaying,
+  isInterruptCommand,
+  shortVideoCharacterProfile,
+  beforeSend: () => beforeRadioChatSend(),
+  afterSend: () => afterRadioChatSend(),
+  onInterrupt: () => {
+    resetRadioPendingState()
+    scheduleRadioRecognitionRestart()
+  },
+})
 
-  stopCurrentAudio()
-  stopLocalMedia()
-  window.clearTimeout(radioSubmitTimerRef.value)
-
-  if (currentStreamController.value) {
-    currentStreamController.value.abort()
-    currentStreamController.value = null
-  }
-
-  loading.value = false
-  radioSubmitting.value = false
-  pendingVoiceText.value = ''
-  input.value = ''
-  radioHasVoice.value = false
-  radioLastVoiceAt.value = 0
-
-  const lastMessage = messages.value[messages.value.length - 1]
-  if (lastMessage?.role === 'assistant' && !lastMessage.content.trim()) {
-    lastMessage.content = '已打断当前回答。'
-    syncActiveSession()
-  }
-
-  scheduleRadioRecognitionRestart()
-}
+isAssistantOutputActive = chatOutputActive
 
 function handleInterruptCommand() {
   stopCurrentRecognition({ abort: true })
@@ -472,557 +712,299 @@ function handleInterruptCommand() {
   interruptAssistant({ force: true })
   pendingVoiceText.value = ''
   input.value = ''
+  resetRadioPendingState()
 }
 
-async function startVoiceInput(event) {
-  if (loading.value) return
-  if (radioModeActive.value) {
-    pushSystemMessage('麦克风持续监听已开启；如需使用页面按住说话按钮，请先关闭监听。')
-    return
-  }
-  if (isListening.value || recognitionRef.value) return
+const voiceInput = useVoiceInput({
+  input,
+  loading,
+  radioModeActive,
+  recognitionRef,
+  isListening,
+  pendingVoiceText,
+  sendMessage,
+  pushSystemMessage,
+  stopLocalMedia,
+  stopCurrentAudio,
+  shouldInterruptFromTranscript,
+  onInterruptCommand: handleInterruptCommand,
+})
 
-  if (event?.currentTarget?.setPointerCapture && event.pointerId !== undefined) {
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-    }
-  }
+stopCurrentRecognition = voiceInput.stopCurrentRecognition
 
-  if (!navigator.mediaDevices?.getUserMedia) {
-    pushSystemMessage('当前浏览器无法读取麦克风，请确认浏览器和权限设置。')
-    return
-  }
+const radioMode = useRadioMode({
+  input,
+  loading,
+  radioModeActive,
+  recognitionRef,
+  isListening,
+  pendingVoiceText,
+  sendMessage,
+  pushSystemMessage,
+  stopCurrentRecognition: (options) => stopCurrentRecognition(options),
+  stopLocalMedia,
+  stopCurrentAudio,
+  isAssistantOutputActive,
+  isInterruptCommand,
+  shouldInterruptFromTranscript,
+  normalizeVoiceText,
+  onInterruptCommand: handleInterruptCommand,
+})
 
-  stopLocalMedia()
-  stopCurrentAudio()
+scheduleRadioRecognitionRestart = radioMode.scheduleRadioRecognitionRestart
+beforeRadioChatSend = radioMode.beforeChatSend
+afterRadioChatSend = radioMode.afterChatSend
+resetRadioPendingState = radioMode.resetRadioPendingState
 
-  voiceIsPressed.value = true
-  voiceStopRequested.value = false
-  pendingVoiceText.value = ''
+const {
+  startVoiceInput,
+  finishVoiceInput,
+  handleGlobalVoiceKeyDown,
+  handleGlobalVoiceKeyUp,
+} = voiceInput
 
-  try {
-    const recognition = await createCloudRecognition({
-      onStart() {
-        isListening.value = true
-      },
-      onText(transcript) {
-        if (!transcript) return
-        if (shouldInterruptFromTranscript(transcript)) {
-          voiceIsPressed.value = false
-          voiceStopRequested.value = false
-          handleInterruptCommand()
-          return
-        }
-
-        pendingVoiceText.value = transcript
-        input.value = transcript
-      },
-      async onEnd() {
-        isListening.value = false
-        recognitionRef.value = null
-
-        const text = compactRepeatedVoiceText(pendingVoiceText.value).trim()
-        const shouldSend = voiceStopRequested.value && text
-
-        voiceIsPressed.value = false
-        voiceStopRequested.value = false
-
-        if (shouldSend) {
-          await nextTick()
-          await sendMessage(text)
-        }
-      },
-      onError(detail) {
-        pushSystemMessage(detail || '火山语音识别失败，请稍后重试。')
-      },
-    })
-    recognitionRef.value = recognition
-  } catch (error) {
-    recognitionRef.value = null
-    isListening.value = false
-    voiceIsPressed.value = false
-    pushSystemMessage(error?.name === 'NotAllowedError'
-      ? '浏览器没有获得麦克风权限，请允许麦克风后再试。'
-      : '火山语音识别启动失败，请稍后重试。')
-  }
-}
-
-function finishVoiceInput() {
-  if (!voiceIsPressed.value && !isListening.value) return
-
-  voiceIsPressed.value = false
-  voiceStopRequested.value = true
-
-  if (recognitionRef.value) {
-    try {
-      recognitionRef.value.stop()
-    } catch {
-      recognitionRef.value = null
-      isListening.value = false
-    }
-    return
-  }
-
-  const text = compactRepeatedVoiceText(pendingVoiceText.value).trim()
-  if (text) {
-    sendMessage(text)
-  }
-}
-
-function isEditableTarget(target) {
-  if (!(target instanceof HTMLElement)) return false
-  const tagName = target.tagName.toLowerCase()
-  return tagName === 'input' || tagName === 'textarea' || target.isContentEditable
-}
-
-function isVoiceActivationEvent(event) {
-  const isSpacePushToTalk = event.code === 'Space' && !isEditableTarget(event.target)
-  const isVoiceHotkey = VOICE_HOTKEY_CODES.has(event.code)
-  return isSpacePushToTalk || isVoiceHotkey
-}
-
-function handleGlobalVoiceKeyDown(event) {
-  if (radioModeActive.value) {
-    if (isVoiceActivationEvent(event)) event.preventDefault()
-    return
-  }
-
-  if (!isVoiceActivationEvent(event) || event.repeat) return
-  event.preventDefault()
-  startVoiceInput()
-}
-
-function handleGlobalVoiceKeyUp(event) {
-  if (radioModeActive.value) {
-    if (isVoiceActivationEvent(event)) event.preventDefault()
-    return
-  }
-
-  if (!isVoiceActivationEvent(event)) return
-  event.preventDefault()
-  finishVoiceInput()
-}
-
-async function toggleRadioMode() {
-  if (radioModeActive.value) {
-    stopRadioMode()
-    return
-  }
-
-  await startRadioMode()
-}
-
-async function startRadioMode() {
-  if (loading.value || radioModeActive.value) return
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    pushSystemMessage('当前浏览器无法读取麦克风音量，不能开启麦克风持续监听。')
-    return
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    })
-    const AudioContext = window.AudioContext || window.webkitAudioContext
-    const audioContext = new AudioContext()
-    const source = audioContext.createMediaStreamSource(stream)
-    const analyser = audioContext.createAnalyser()
-
-    analyser.fftSize = 1024
-    source.connect(analyser)
-
-    audioStreamRef.value = stream
-    audioContextRef.value = audioContext
-    analyserRef.value = analyser
-    radioModeActive.value = true
-    radioSubmitting.value = false
-    radioRecognitionStarting.value = false
-    radioAsrRestartDelay.value = RADIO_ASR_RESTART_MIN_MS
-    lastRadioAsrErrorAt.value = 0
-    radioLastVoiceAt.value = 0
-    pendingVoiceText.value = ''
-
-    stopLocalMedia()
-    stopCurrentAudio()
-
-    startRadioRecognition()
-    monitorRadioVolume()
-  } catch {
-    pushSystemMessage('无法开启麦克风持续监听，请确认浏览器已经允许麦克风权限，并检查麦克风是否被系统识别为输入设备。')
-  }
-}
-
-function stopRadioMode() {
-  radioModeActive.value = false
-  radioSubmitting.value = false
-  radioRecognitionStarting.value = false
-  radioAsrRestartDelay.value = RADIO_ASR_RESTART_MIN_MS
-  radioHasVoice.value = false
-  radioLastVoiceAt.value = 0
-  window.clearTimeout(radioRestartTimerRef.value)
-  window.clearTimeout(radioSubmitTimerRef.value)
-
-  if (radioFrameRef.value) {
-    window.cancelAnimationFrame(radioFrameRef.value)
-    radioFrameRef.value = 0
-  }
-
-  stopCurrentRecognition({ abort: true })
-
-  if (audioStreamRef.value) {
-    audioStreamRef.value.getTracks().forEach((track) => track.stop())
-    audioStreamRef.value = null
-  }
-
-  if (audioContextRef.value) {
-    audioContextRef.value.close()
-    audioContextRef.value = null
-  }
-
-  analyserRef.value = null
-}
-
-function startRadioRecognition() {
-  if (!radioModeActive.value || recognitionRef.value || radioRecognitionStarting.value) return
-
-  radioRecognitionStarting.value = true
-
-  createCloudRecognition({
-    stream: audioStreamRef.value,
-    onStart() {
-      isListening.value = true
-      radioRecognitionStarting.value = false
-    },
-    onText(transcript) {
-      if (!transcript) return
-      radioAsrRestartDelay.value = RADIO_ASR_RESTART_MIN_MS
-      if (shouldInterruptFromTranscript(transcript)) {
-        handleInterruptCommand()
-        return
-      }
-
-      if (isAssistantOutputActive() || radioSubmitting.value) {
-        pendingVoiceText.value = ''
-        input.value = ''
-        return
-      }
-
-      if (isRecentlySubmittedVoice(transcript)) {
-        pendingVoiceText.value = ''
-        input.value = ''
-        return
-      }
-
-      pendingVoiceText.value = transcript
-      input.value = transcript
-      scheduleRadioTextSubmit()
-    },
-    onEnd() {
-      isListening.value = false
-      recognitionRef.value = null
-      radioRecognitionStarting.value = false
-      scheduleRadioRecognitionRestart()
-    },
-    onError(detail) {
-      const now = Date.now()
-      if (isFatalAsrError(detail || '')) {
-        pushSystemMessage(/未配置|未开通|没有流式 ASR 权限|resource not granted|403/i.test(detail || '')
-          ? detail
-          : '浏览器没有获得麦克风权限，请允许麦克风后再试。')
-        stopRadioMode()
-        return
-      }
-      if (now - lastRadioAsrErrorAt.value > RADIO_ASR_ERROR_MESSAGE_INTERVAL_MS) {
-        pushSystemMessage(detail || '火山语音识别失败，正在稍后重试。')
-        lastRadioAsrErrorAt.value = now
-      }
-      radioAsrRestartDelay.value = Math.min(
-        RADIO_ASR_RESTART_MAX_MS,
-        Math.max(3000, radioAsrRestartDelay.value * 2),
-      )
-    },
-  }).then((recognition) => {
-    radioRecognitionStarting.value = false
-    if (!radioModeActive.value) {
-      recognition.abort()
-      return
-    }
-    recognitionRef.value = recognition
-  }).catch((error) => {
-    radioRecognitionStarting.value = false
-    recognitionRef.value = null
-    isListening.value = false
-    if (error?.name === 'NotAllowedError') {
-      pushSystemMessage('浏览器没有获得麦克风权限，请允许麦克风后再试。')
-      stopRadioMode()
-      return
-    }
-    radioAsrRestartDelay.value = Math.min(
-      RADIO_ASR_RESTART_MAX_MS,
-      Math.max(3000, radioAsrRestartDelay.value * 2),
-    )
-    scheduleRadioRecognitionRestart()
-  })
-}
-
-function scheduleRadioRecognitionRestart() {
-  window.clearTimeout(radioRestartTimerRef.value)
-  if (!radioModeActive.value) return
-
-  radioRestartTimerRef.value = window.setTimeout(() => {
-    if (!radioModeActive.value) return
-    if (recognitionRef.value || radioRecognitionStarting.value) {
-      scheduleRadioRecognitionRestart()
-      return
-    }
-    startRadioRecognition()
-  }, radioAsrRestartDelay.value)
-}
-
-function scheduleRadioTextSubmit() {
-  window.clearTimeout(radioSubmitTimerRef.value)
-  if (!radioModeActive.value || isAssistantOutputActive()) return
-
-  radioSubmitTimerRef.value = window.setTimeout(() => {
-    const text = compactRepeatedVoiceText(pendingVoiceText.value).trim()
-    if (
-      text &&
-      radioModeActive.value &&
-      !isAssistantOutputActive() &&
-      !radioSubmitting.value &&
-      !isRecentlySubmittedVoice(text)
-    ) {
-      submitRadioText(text)
-    }
-  }, RADIO_TEXT_IDLE_MS)
-}
-
-function monitorRadioVolume() {
-  if (!radioModeActive.value || !analyserRef.value) return
-
-  const data = new Uint8Array(analyserRef.value.fftSize)
-
-  const tick = () => {
-    if (!radioModeActive.value || !analyserRef.value) return
-
-    analyserRef.value.getByteTimeDomainData(data)
-    let sum = 0
-
-    for (const value of data) {
-      const normalized = (value - 128) / 128
-      sum += normalized * normalized
-    }
-
-    const volume = Math.sqrt(sum / data.length)
-    const now = Date.now()
-
-    if (isAssistantOutputActive()) {
-      radioHasVoice.value = false
-      radioLastVoiceAt.value = 0
-      window.clearTimeout(radioSubmitTimerRef.value)
-      radioFrameRef.value = window.requestAnimationFrame(tick)
-      return
-    }
-
-    if (volume > RADIO_VOLUME_THRESHOLD) {
-      radioHasVoice.value = true
-      radioLastVoiceAt.value = now
-    }
-
-    const text = compactRepeatedVoiceText(pendingVoiceText.value).trim()
-    const hasFinishedSpeaking =
-      radioHasVoice.value && text && radioLastVoiceAt.value && now - radioLastVoiceAt.value > RADIO_SILENCE_MS
-
-    if (hasFinishedSpeaking && !isAssistantOutputActive() && !radioSubmitting.value && !isRecentlySubmittedVoice(text)) {
-      submitRadioText(text)
-    }
-
-    radioFrameRef.value = window.requestAnimationFrame(tick)
-  }
-
-  radioFrameRef.value = window.requestAnimationFrame(tick)
-}
-
-async function submitRadioText(rawText) {
-  const text = compactRepeatedVoiceText(rawText).trim()
-  if (!text) return
-
-  if (isInterruptCommand(text)) {
-    handleInterruptCommand()
-    return
-  }
-
-  if (isAssistantOutputActive() || radioSubmitting.value || isRecentlySubmittedVoice(text)) return
-
-  window.clearTimeout(radioSubmitTimerRef.value)
-  radioSubmitting.value = true
-  radioHasVoice.value = false
-  pendingVoiceText.value = ''
-  input.value = ''
-  markVoiceSubmitted(text)
-  stopCurrentRecognition()
-
-  try {
-    await sendMessage(text)
-  } finally {
-    radioSubmitting.value = false
-    scheduleRadioRecognitionRestart()
-  }
-}
+const {
+  toggleRadioMode,
+  startRadioMode,
+  stopRadioMode,
+} = radioMode
 
 async function handleSend() {
   await sendMessage()
 }
 
-async function sendMessage(forcedText = '') {
-  const text = (forcedText || input.value).trim()
-  if (!text) return
+async function handleCalligraphyOption(option) {
+  if (!option || loading.value) return
+  const text = option.type === 'author'
+    ? `选择书法风格：${option.style || ''}，书法作者：${option.value}`
+    : `选择书法风格：${option.value}`
+  await sendMessage(text)
+}
 
-  if (isInterruptCommand(text)) {
-    handleInterruptCommand()
-    return
-  }
+async function generateShortVideo() {
+  const topic = shortVideoTopic.value.trim()
+  if (!topic || shortVideoLoading.value) return
 
-  if (loading.value) return
-
-  if (radioModeActive.value) {
-    window.clearTimeout(radioSubmitTimerRef.value)
-    stopCurrentRecognition({ abort: true })
-  }
-
+  shortVideoLoading.value = true
+  shortVideoError.value = ''
+  shortVideoProject.value = null
+  shortVideoDraftContent.value = ''
+  shortVideoToolCalls.value = []
+  shortVideoRenderTasks.value = {}
+  shortVideoActiveTab.value = 'overview'
   stopLocalMedia()
   stopCurrentAudio()
-  const conversationContext = buildConversationContext()
-  const calligraphySourceText = getLatestAssistantCalligraphyText()
-
-  const assistantMessage = {
-    id: Date.now() + 1,
-    role: 'assistant',
-    content: '',
-    videos: [],
-    autoPlay: false,
-    calligraphyImageUrl: '',
-    toolCalls: [],
-  }
-
-  messages.value.push({
-    id: Date.now(),
-    role: 'user',
-    content: text,
-    videos: [],
-    autoPlay: false,
-    calligraphyImageUrl: '',
-    toolCalls: [],
-  })
-  messages.value.push(assistantMessage)
-  const assistantIndex = messages.value.length - 1
-  syncActiveSession({ updateTitle: true })
-  input.value = ''
-  loading.value = true
-  currentResponseShouldSpeak.value = true
-  const controller = new AbortController()
-  currentStreamController.value = controller
-  if (radioModeActive.value) {
-    scheduleRadioRecognitionRestart()
-  }
-  await scrollToBottom()
 
   try {
-    await streamChatMessage(text, {
-      signal: controller.signal,
-      onMeta(data) {
-        const shouldPlayVideo = Boolean(data.auto_play)
-        const mediaResources = Array.isArray(data.videos) ? data.videos : []
-        if (data.speak === false) {
-          currentResponseShouldSpeak.value = false
-          stopCurrentAudio()
-        }
-        messages.value[assistantIndex].videos = mediaResources
-        messages.value[assistantIndex].autoPlay = shouldPlayVideo
-        messages.value[assistantIndex].calligraphyImageUrl = data.calligraphy_image_url || ''
-        if (Array.isArray(data.tool_calls) && data.tool_calls.length) {
-          messages.value[assistantIndex].toolCalls = data.tool_calls
-        }
-        if (shouldPlayVideo) {
-          currentResponseShouldSpeak.value = false
-          stopCurrentAudio()
-        }
+    await streamChatMessage(
+      `请生成一个关于“${topic}”的五镜头通用短剧方案，题材不限，可以是日常生活、校园、治愈、奇幻、轻喜剧或用户主题本身；包含分镜、对白和 AI 视频提示词。优先保证视频稳定出片：每个镜头 3-5 秒，只做一个简单动作，使用固定中景或中远景，避免手部特写、快速转身、复杂奔跑和多人互动。`,
+      {
+        onMeta(data) {
+          if (Array.isArray(data.tool_calls) && data.tool_calls.length) {
+            shortVideoToolCalls.value = data.tool_calls
+          }
+          if (data.short_video_project) {
+            shortVideoProject.value = data.short_video_project
+          }
+        },
+        onTool(data) {
+          const existing = shortVideoToolCalls.value || []
+          const sameToolStep = (item) => {
+            if (data.step_id || item.step_id) {
+              return item.step_id === data.step_id
+            }
+            return item.tool_name === data.tool_name
+          }
+          const next = existing.map((item) =>
+            sameToolStep(item)
+              ? { ...item, ...data }
+              : item
+          )
+          if (!next.some(sameToolStep)) {
+            next.push(data)
+          }
+          shortVideoToolCalls.value = next
+        },
+        onDelta(content) {
+          shortVideoDraftContent.value += content
+        },
       },
-      onTool(data) {
-        const existing = messages.value[assistantIndex].toolCalls || []
-        const next = existing.map((item) =>
-          item.tool_name === data.tool_name
-            ? { ...item, status: data.status || item.status }
-            : item
-        )
-        if (!next.some((item) => item.tool_name === data.tool_name)) {
-          next.push(data)
-        }
-        messages.value[assistantIndex].toolCalls = next
-        syncActiveSession()
-      },
-      async onDelta(content) {
-        await appendStreamingText(assistantIndex, content)
-        if (currentResponseShouldSpeak.value) {
-          queueStreamingSpeech(content)
-        }
-      },
-      onVideos(data) {
-        const shouldPlayVideo = Boolean(data.auto_play)
-        const mediaResources = Array.isArray(data.videos) ? data.videos : []
-        messages.value[assistantIndex].videos = mediaResources
-        messages.value[assistantIndex].autoPlay = shouldPlayVideo
-        if (shouldPlayVideo && mediaResources.length) {
-          currentResponseShouldSpeak.value = false
-          stopCurrentAudio()
-        }
-        syncActiveSession()
-        scrollToBottom()
-      },
-      onDone() {
-        if (!messages.value[assistantIndex].content.trim()) {
-          messages.value[assistantIndex].content = '暂时没有生成有效回答，请稍后再试。'
-        }
-        syncActiveSession()
-        if (currentResponseShouldSpeak.value) {
-          queueStreamingSpeech('', { flush: true })
-        }
-      },
-    }, {
-      conversationContext,
-      calligraphySourceText,
-      calligraphyStyle: '',
-      calligraphyAuthor: '',
-    })
+      {
+        shortVideoCharacterProfile: shortVideoCharacterProfile.value.trim(),
+      }
+    )
   } catch (error) {
-    const wasAborted = controller.signal.aborted || error?.name === 'AbortError'
-    messages.value[assistantIndex].content = wasAborted
-      ? messages.value[assistantIndex].content || '已打断当前回答。'
-      : error?.message || '请求失败，请检查后端服务、DeepSeek API 或 MySQL 连接状态。'
-    messages.value[assistantIndex].videos = []
-    messages.value[assistantIndex].autoPlay = false
-    messages.value[assistantIndex].calligraphyImageUrl = ''
-    messages.value[assistantIndex].toolCalls = []
-    syncActiveSession()
-    if (!wasAborted) {
-      speakText(messages.value[assistantIndex].content)
-    }
+    shortVideoError.value = error?.message || '短剧生成失败，请检查后端服务或模型配置。'
   } finally {
-    if (currentStreamController.value === controller) {
-      currentStreamController.value = null
+    shortVideoLoading.value = false
+  }
+}
+
+function resetShortVideo() {
+  shortVideoTopic.value = ''
+  shortVideoError.value = ''
+  shortVideoProject.value = null
+  shortVideoDraftContent.value = ''
+  shortVideoToolCalls.value = []
+  shortVideoRenderTasks.value = {}
+  shortVideoActiveTab.value = 'overview'
+}
+
+async function confirmRenderShot(shot) {
+  if (!shot?.video_prompt || isShotRendering(shot.shot)) return
+  const accepted = window.confirm(`确认调用视频生成 API 渲染镜头 ${shot.shot}？这一步可能产生 API 费用。`)
+  if (!accepted) return
+
+  const previousTask = shortVideoRenderTasks.value[shot.shot - 1]
+  const previousTailFrameUrl = previousTask?.tail_frame_url || ''
+  setRenderTask(shot.shot, {
+    status: 'submitting',
+    progress: 0,
+    error: '',
+    video_url: '',
+    tail_frame_url: '',
+  })
+
+  try {
+    const data = await submitShortVideoRender({
+      prompt: shot.video_prompt,
+      duration: parseShotDuration(shot.duration),
+      previousTailFrameUrl,
+      characterReferenceImage: shortVideoCharacterImage.value,
+      prototypeReferenceFrameUrl: selectedPrototypeFrameUrl.value,
+    })
+    setRenderTask(shot.shot, {
+      ...shortVideoRenderTasks.value[shot.shot],
+      task_id: data.task_id,
+      status: 'processing',
+      duration: data.duration,
+    })
+    pollShotRenderStatus(shot.shot, data.task_id)
+  } catch (error) {
+    setRenderTask(shot.shot, {
+      ...shortVideoRenderTasks.value[shot.shot],
+      status: 'failed',
+      error: error?.response?.data?.detail || error?.message || '视频渲染提交失败。',
+    })
+  }
+}
+
+async function pollShotRenderStatus(shotNumber, taskId) {
+  if (!taskId) return
+  try {
+    const data = await fetchShortVideoRenderStatus(taskId)
+    setRenderTask(shotNumber, {
+      ...shortVideoRenderTasks.value[shotNumber],
+      ...data,
+      task_id: taskId,
+    })
+    if (!['success', 'failed'].includes(data.status)) {
+      window.setTimeout(() => pollShotRenderStatus(shotNumber, taskId), 3000)
     }
-    loading.value = false
-    if (radioModeActive.value) {
-      radioSubmitting.value = false
-      scheduleRadioRecognitionRestart()
+  } catch (error) {
+    setRenderTask(shotNumber, {
+      ...shortVideoRenderTasks.value[shotNumber],
+      task_id: taskId,
+      status: 'failed',
+      error: error?.response?.data?.detail || error?.message || '视频渲染状态查询失败。',
+    })
+  }
+}
+
+function setRenderTask(shotNumber, task) {
+  shortVideoRenderTasks.value = {
+    ...shortVideoRenderTasks.value,
+    [shotNumber]: task,
+  }
+}
+
+function isShotRendering(shotNumber) {
+  const status = shortVideoRenderTasks.value[shotNumber]?.status
+  return ['submitting', 'processing'].includes(status)
+}
+
+function renderButtonLabel(shotNumber) {
+  const task = shortVideoRenderTasks.value[shotNumber]
+  if (!task) return '确认生成'
+  if (task.status === 'submitting') return '提交中'
+  if (task.status === 'processing') return '生成中'
+  if (task.status === 'success') return '重新生成'
+  if (task.status === 'failed') return '重试生成'
+  return '确认生成'
+}
+
+function renderStatusLabel(task) {
+  const labels = {
+    submitting: '正在提交渲染任务',
+    processing: '视频生成中',
+    success: '视频已生成',
+    failed: '生成失败',
+  }
+  return labels[task?.status] || '等待生成'
+}
+
+function parseShotDuration(value) {
+  const numbers = String(value || '').match(/\d+/g)?.map(Number) || []
+  if (!numbers.length) return 5
+  return Math.max(3, Math.min(5, Math.max(...numbers)))
+}
+
+function copyShortVideoPrompts() {
+  if (!shortVideoProject.value) return
+  const prompts = shortVideoProject.value.shots
+    .map((shot) => `镜头${shot.shot}：${shot.video_prompt}`)
+    .join('\n\n')
+  copyText(`${prompts}\n\n负面提示词：${shortVideoProject.value.negative_prompt || ''}`.trim())
+}
+
+async function copyText(text) {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Clipboard may be unavailable on non-secure origins.
+  }
+}
+
+function saveCharacterProfile() {
+  const value = shortVideoCharacterProfile.value.trim()
+  if (value) {
+    window.localStorage.setItem('culture-agent-character-profile', value)
+  } else {
+    window.localStorage.removeItem('culture-agent-character-profile')
+  }
+}
+
+function handleCharacterImageUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '')
+    shortVideoCharacterImage.value = dataUrl
+    if (!shortVideoCharacterProfile.value.trim()) {
+      shortVideoCharacterProfile.value = DEFAULT_CHARACTER_PROFILE
+      saveCharacterProfile()
     }
-    await scrollToBottom()
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+function clearCharacterImage() {
+  shortVideoCharacterImage.value = ''
+}
+
+async function loadShortVideoPrototypeFrames() {
+  try {
+    shortVideoPrototypeFrames.value = await fetchShortVideoPrototypeFrames()
+    if (!selectedPrototypeFrameUrl.value && shortVideoPrototypeFrames.value.length) {
+      selectedPrototypeFrameUrl.value = shortVideoPrototypeFrames.value[0].url
+    }
+  } catch {
+    shortVideoPrototypeFrames.value = []
+    selectedPrototypeFrameUrl.value = ''
   }
 }
 
@@ -1030,6 +1012,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalVoiceKeyDown)
   window.addEventListener('keyup', handleGlobalVoiceKeyUp)
   startRadioMode()
+  loadShortVideoPrototypeFrames()
 })
 
 onBeforeUnmount(() => {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# gzip/json/uuid 用于按火山 ASR 协议压缩请求体、解析响应和生成请求 ID。
 import gzip
 import json
 import uuid

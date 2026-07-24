@@ -13,7 +13,12 @@ def media_search_tool(context: AgentContext, call: AgentToolCall) -> AgentToolRe
     except (TypeError, ValueError):
         limit = 3
 
-    videos = search_videos_by_keywords([query], limit=max(1, min(limit, 10)), prefer_video=prefer_video)
+    videos = search_videos_by_keywords(
+        [query],
+        limit=max(1, min(limit, 10)),
+        prefer_video=prefer_video,
+        db=context.db,
+    )
     if not videos:
         return AgentToolResult(
             tool_name=call.tool_name,

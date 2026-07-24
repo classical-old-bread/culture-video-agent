@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import uuid
 
+# requests 用于调用火山引擎 TTS 的 HTTP 接口。
 import requests
 
 from app.config import get_settings

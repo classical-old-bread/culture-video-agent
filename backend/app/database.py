@@ -1,3 +1,4 @@
+# SQLAlchemy 负责创建数据库连接引擎和 ORM 基类。
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 

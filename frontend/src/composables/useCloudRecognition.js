@@ -81,10 +81,12 @@ export async function createCloudRecognition({ onText, onStart, onEnd, onError, 
     try {
       source.disconnect()
     } catch {
+      // Already disconnected.
     }
     try {
       processor.disconnect()
     } catch {
+      // Already disconnected.
     }
     if (ownsStream) {
       stream.getTracks().forEach((track) => track.stop())
@@ -126,6 +128,7 @@ export async function createCloudRecognition({ onText, onStart, onEnd, onError, 
         cleanup()
       }
     } catch {
+      // Ignore malformed ASR messages.
     }
   }
 

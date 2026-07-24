@@ -1,0 +1,15 @@
+.venv
+__pycache__/
+*.pyc
+
+# Never copy local or Docker environment files into the backend image.
+.env
+.env.*
+
+generated/
+database/
+*.log
+
+Dockerfile
+.dockerignore
+README.md

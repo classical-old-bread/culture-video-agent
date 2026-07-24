@@ -3,11 +3,12 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
 
+# python-dotenv 会读取 backend/.env，把环境变量加载到 os.getenv 可见的环境里。
 from dotenv import load_dotenv
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-load_dotenv(BACKEND_DIR / ".env")
+load_dotenv(BACKEND_DIR / ".env", override=True)
 
 
 class Settings:
@@ -54,8 +55,6 @@ class Settings:
 
     backend_host: str = os.getenv("BACKEND_HOST", "127.0.0.1")
     backend_port: int = int(os.getenv("BACKEND_PORT", "8000"))
-    music_root: str = os.getenv("MUSIC_ROOT", str(backend_dir / "media" / "audio"))
-    video_root: str = os.getenv("VIDEO_ROOT", str(backend_dir / "media" / "video"))
 
     calligraphy_output_dir: str = os.getenv(
         "CALLIGRAPHY_OUTPUT_DIR",
@@ -63,7 +62,11 @@ class Settings:
     )
     calligraphy_dataset_dir: str = os.getenv(
         "CALLIGRAPHY_DATASET_DIR",
-        str(backend_dir / "calligraphy_fonts"),
+        str(backend_dir / "data" / "calligraphy_fonts"),
+    )
+    media_library_dir: str = os.getenv(
+        "MEDIA_LIBRARY_DIR",
+        str(backend_dir / "data" / "media"),
     )
 
     knowledge_base_docs_dir: str = os.getenv(
@@ -82,6 +85,19 @@ class Settings:
     knowledge_base_top_k: int = int(os.getenv("KNOWLEDGE_BASE_TOP_K", "4"))
     knowledge_base_chunk_size: int = int(os.getenv("KNOWLEDGE_BASE_CHUNK_SIZE", "800"))
     knowledge_base_chunk_overlap: int = int(os.getenv("KNOWLEDGE_BASE_CHUNK_OVERLAP", "120"))
+
+    kling_api_key: str = os.getenv("KLING_API_KEY", "")
+    kling_model: str = os.getenv("KLING_MODEL", "kling/kling-v3-omni-video-generation")
+    short_video_output_dir: str = os.getenv(
+        "SHORT_VIDEO_OUTPUT_DIR",
+        str(backend_dir / "generated" / "short_video"),
+    )
+    short_video_prototype_frame_dir: str = os.getenv(
+        "SHORT_VIDEO_PROTOTYPE_FRAME_DIR",
+        str(backend_dir / "generated" / "short_video" / "prototype_frames"),
+    )
+    short_video_render_api_base_url: str = os.getenv("SHORT_VIDEO_RENDER_API_BASE_URL", "").rstrip("/")
+    short_video_render_timeout_seconds: int = int(os.getenv("SHORT_VIDEO_RENDER_TIMEOUT_SECONDS", "30"))
 
     max_message_length: int = 1000
 

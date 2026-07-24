@@ -1,1 +1,1 @@
-"""Agent orchestration package."""
+"""Coordinator, domain agents, and tools for the culture assistant."""

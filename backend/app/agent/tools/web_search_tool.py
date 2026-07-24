@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# requests 用于调用外部搜索服务的 HTTP API。
 import requests
 
 from app.agent.schemas import AgentContext, AgentToolCall, AgentToolResult
