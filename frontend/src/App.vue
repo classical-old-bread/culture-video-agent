@@ -88,7 +88,6 @@
           <div class="output-header">
             <div>
               <strong>对话记录</strong>
-              <span>{{ activeSessionTitle }}</span>
             </div>
             <div class="output-actions">
               <button type="button" class="clear-button" :disabled="loading" @click="clearCurrentSession">
