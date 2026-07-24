@@ -5,6 +5,7 @@
 backend/.env
 backend/.env.*
 !backend/.env.example
+!backend/.env.docker.example
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
